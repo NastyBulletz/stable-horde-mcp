@@ -1,6 +1,4 @@
 {
-  "buildCommand": "echo 'Serverless functions - no build needed'",
-  "outputDirectory": null,
   "rewrites": [
     {
       "source": "/(.*)",
