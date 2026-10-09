@@ -1,4 +1,5 @@
 {
+  "buildCommand": "echo 'Serverless functions - no build needed'",
   "rewrites": [
     {
       "source": "/(.*)",
