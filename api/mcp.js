@@ -3,103 +3,52 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 export default async function handler(req, res) {
-    // CORS headers for Claude
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, mcp-protocol-version, mcp-session-id');
 
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method === 'GET') return res.status(200).json({ status: 'ok' });
 
-    // **FIX:** Respond to Claude's initial discovery check with a success status.
-    // This tells Claude the server is online without starting a full session.
-    if (req.method === 'GET') {
-        return res.status(200).json({ status: 'ok', message: 'MCP server is ready.' });
-    }
-
-    // Handle POST requests for actual MCP communication
     if (req.method === 'POST') {
         const server = new Server(
-            { name: 'stable-horde-mcp', version: '1.0.0' },
+            { name: 'pollinations-mcp', version: '1.0.0' },
             { capabilities: { tools: {} } }
         );
 
         server.setRequestHandler(ListToolsRequestSchema, async () => ({
-            tools: [
-                {
-                    name: 'generate_image',
-                    description: 'Generate an image using Stable Horde from a text prompt.',
-                    inputSchema: {
-                        type: 'object',
-                        properties: {
-                            prompt: { type: 'string', description: 'The text prompt for image generation.' },
-                        },
-                        required: ['prompt'],
+            tools: [{
+                name: 'generate_image',
+                description: 'Generate an image using Pollinations.AI from a text prompt.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        prompt: { type: 'string', description: 'The text prompt for image generation.' },
+                        seed: { type: 'number', description: 'Optional seed for consistent characters.' },
                     },
+                    required: ['prompt'],
                 },
-            ],
+            }],
         }));
 
         server.setRequestHandler(CallToolRequestSchema, async (request) => {
-            if (request.params.name !== 'generate_image') {
-                throw new Error('Unknown tool');
-            }
-            const { prompt } = request.params.arguments;
-            const apiKey = process.env.STABLE_HORDE_KEY || '0000000000';
+            const { prompt, seed } = request.params.arguments;
+            const finalSeed = seed || Math.floor(Math.random() * 1000000);
+            const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&seed=${finalSeed}&nologo=true&model=flux`;
             
-            const payload = {
-                prompt,
-                params: { width: 1024, height: 1024, steps: 30, sampler_name: 'k_euler', n: 1 },
-                nsfw: false,
-                censor_nsfw: true,
-                models: ['stable_diffusion'],
+            return {
+                content: [{
+                    type: 'text',
+                    text: `Image generated! URL: ${imageUrl}\n\nSeed used: ${finalSeed}. Save this seed to keep Maya consistent in future images.`
+                }],
             };
-
-            try {
-                const response = await fetch('https://stablehorde.net/api/v2/generate/async', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
-                    body: JSON.stringify(payload),
-                });
-                
-                if (!response.ok) throw new Error(await response.text());
-                
-                const job = await response.json();
-                const jobId = job.id;
-                let imageUrl = null;
-                
-                for (let i = 0; i < 30; i++) {
-                    await new Promise((r) => setTimeout(r, 5000));
-                    const statusResponse = await fetch(`https://stablehorde.net/api/v2/generate/status/${jobId}`);
-                    const status = await statusResponse.json();
-                    
-                    if (status.faulted) throw new Error('Image generation faulted.');
-                    if (status.done) { 
-                        imageUrl = status.generations[0].img; 
-                        break; 
-                    }
-                }
-                
-                if (!imageUrl) throw new Error('Image generation timed out.');
-                
-                return {
-                    content: [{ type: 'text', text: `Image generated! URL: ${imageUrl}` }],
-                };
-            } catch (error) {
-                return { content: [{ type: 'text', text: `Error: ${error.message}` }] };
-            }
         });
 
-        const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined, // Stateless
-        });
-
+        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
         await server.connect(transport);
         await transport.handleRequest(req, res);
         return;
     }
 
-    // For any other method, return a 405 error
     res.status(405).json({ error: 'Method not allowed' });
 }
