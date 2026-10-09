@@ -1,93 +1,13 @@
-import { createMcpHandler } from 'mcp-handler';
-import { z } from 'zod';
-
-const handler = createMcpHandler(
-  (server) => {
-    server.tool(
-      'generate_image',
-      'Generate an image using Stable Horde from a text prompt.',
-      {
-        prompt: z.string().describe('The text prompt for image generation.'),
-      },
-      async ({ prompt }) => {
-        const apiKey = process.env.STABLE_HORDE_KEY || '0000000000';
-        
-        const payload = {
-          prompt: prompt,
-          params: {
-            width: 1024,
-            height: 1024,
-            steps: 30,
-            sampler_name: 'k_euler',
-            n: 1,
-          },
-          nsfw: false,
-          censor_nsfw: true,
-          models: ['stable_diffusion'],
-        };
-
-        try {
-          const response = await fetch('https://stablehorde.net/api/v2/generate/async', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': apiKey,
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Stable Horde API error: ${errorText}`);
-          }
-
-          const job = await response.json();
-          const jobId = job.id;
-
-          let imageUrl = null;
-          for (let i = 0; i < 30; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 5000));
-
-            const statusResponse = await fetch(`https://stablehorde.net/api/v2/generate/status/${jobId}`);
-            const status = await statusResponse.json();
-
-            if (status.faulted) {
-              throw new Error('Image generation faulted on the server.');
-            }
-
-            if (status.done) {
-              imageUrl = status.generations[0].img;
-              break;
-            }
-          }
-
-          if (!imageUrl) {
-            throw new Error('Image generation timed out after 2.5 minutes.');
-          }
-
-          return {
-            content: [
-              {
-                type: 'image',
-                data: imageUrl,
-              },
-            ],
-          };
-        } catch (error) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Error generating image: ${error.message}`,
-              },
-            ],
-          };
-        }
-      }
-    );
+{
+  "name": "stable-horde-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo 'No build step required'"
   },
-  {},
-  { basePath: '/api' }
-);
-
-export default handler;
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.0",
+    "zod": "^3.23.8"
+  }
+}
