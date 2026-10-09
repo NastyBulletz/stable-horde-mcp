@@ -34,7 +34,7 @@ export default async function handler(req, res) {
         server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { prompt, seed } = request.params.arguments;
             const finalSeed = seed || Math.floor(Math.random() * 1000000);
-            const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&seed=${finalSeed}&nologo=true&model=flux`;
+            const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=1344&seed=${finalSeed}&nologo=true&model=flux-realism&enhance=true`;
             
             return {
                 content: [{
